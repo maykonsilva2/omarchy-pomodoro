@@ -52,11 +52,20 @@ BarWidget {
 
   property bool popupOpen: false
 
-  // Shape contract the shell expects from a bar widget with a panel.
-  readonly property bool opened: popupOpen
-  function open() { popupOpen = true }
-  function close() { popupOpen = false }
-  function togglePanel() { popupOpen = !popupOpen }
+  // Shape contract the shell expects from a bar widget with a panel. The notes
+  // editor is a separate window, but it is a surface of this widget too.
+  readonly property bool opened: popupOpen || (notes ? notes.editorOpen : false)
+  function open() {
+    // Mirrored guard: the card stacks above the editor's layer surface, so the
+    // editor has to go down first when the card comes up.
+    if (notes && notes.editorOpen) notes.closeEditor()
+    popupOpen = true
+  }
+  function close() {
+    if (notes && notes.editorOpen) { notes.closeEditor(); return }
+    popupOpen = false
+  }
+  function togglePanel() { popupOpen ? close() : open() }
 
   function writeSetting(name, value) {
     var entry = { id: root.moduleName }
@@ -77,6 +86,7 @@ BarWidget {
     function toggle(): void { root.togglePanel() }
     function show(): void { root.open() }
     function hide(): void { root.close() }
+    function notes(): void { if (notes) notes.openEditor() }
   }
 
   WidgetButton {
@@ -286,6 +296,17 @@ BarWidget {
           bordered: true
           onClicked: if (root.ready) root.pomo.startBreak("long", 0)
         }
+      }
+
+      PanelSeparator { width: parent.width; foreground: root.fg }
+
+      // ---- notes: preview here, the editor window lives in NotesSection.qml
+      NotesSection {
+        id: notes
+        width: parent.width
+        host: root
+        bar: root.bar
+        previewVisible: root.popupOpen
       }
 
       PanelSeparator { width: parent.width; foreground: root.fg }

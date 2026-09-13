@@ -205,9 +205,63 @@ pomo-state-read      bounded, non-following state reader (python3, stdlib only)
 uni-pomo             optional bash CLI
 extras/bindings.lua  optional Hyprland keybinds
 extras/omarchy-menu.jsonc  optional Omarchy menu entries
-screenshots/         popup.png, break.png
+screenshots/         popup.png, break.png, notes.png, notes-editor.png
 preview.png          marketplace preview
 ```
+
+## Local changes (this machine)
+
+A small persistent notepad for the pomodoro. The feature is deliberately
+isolated so the patch against upstream stays tiny:
+
+- `NotesSection.qml` (new file) holds the whole feature: the preview block that
+  goes inside the popup, the editor window, the file plumbing.
+- `BarWidget.qml` only adds the `NotesSection` instance in the popup column, one
+  IPC entry point (`omarchy-shell techywilbur.pomodoro notes`) and makes
+  `opened`/`close()` aware of the editor window. Ten-odd lines, so upstream
+  edits to this file rarely conflict with it.
+
+### What it looks like
+
+![Notes section in the popup, between the break buttons and the toggles](screenshots/notes.png)
+
+![The notes editor: a PanelWindow over the desktop](screenshots/notes-editor.png)
+
+How it behaves:
+
+- The popup card gains a **Notes** section: a read-only preview of the note plus
+  a "Write a note" button.
+- Opening the editor dismisses the card, and opening the card dismisses the
+  editor. Not cosmetic: the card is an xdg-popup of the bar and stacks *above*
+  the editor's layer surface, so leaving it up would bury the editor while you
+  type.
+- The editor is a `PanelWindow` (`WlrLayershell.namespace: pomodoro-notes`) with
+  `WlrKeyboardFocus.Exclusive` while it is up. It cannot live in the popup: a
+  bar popup is an xdg-popup on a layer surface and never receives keyboard
+  events (verified — synthetic Esc and typed text never arrive), so the editor
+  gets its own layer surface, the same shape the break screen uses.
+- The note is a plain markdown file at
+  `~/.local/share/omarchy/pomodoro/notes.md` (created on first save). Editing it
+  in an external editor is fine: the file is re-read when a surface opens, and a
+  reload never clobbers text that is dirty in the editor.
+- Saving is automatic: 800 ms after the last keystroke, plus a flush when the
+  editor closes (`Esc`, `Done`, click outside). Writes go through a write-only
+  `FileView` with `atomicWrites: true` (temp file + rename), the same pattern
+  `Service.qml` uses for its state file.
+
+Maintenance (this machine): the change is a commit on top of upstream `main`,
+published to a fork so both update paths work:
+
+- `origin` = `github.com/maykonsilva2/omarchy-pomodoro` (the fork, includes the
+  patch); `upstream` = the author's repo. `git branch -vv` shows `main` tracking
+  `origin/main`.
+- `pomodoro-update` (in `~/.local/bin`) fetches `upstream`, rebases the local
+  commit onto the newest upstream commit, publishes the result to the fork and
+  reloads the shell. On conflict it aborts and leaves the checkout untouched.
+- `omarchy plugin update` also works now (it pulls the fork and fast-forwards,
+  because the fork already carries the rebased commit).
+- Reinstalling the plugin with the notes feature: point Omarchy at the fork,
+  e.g. `omarchy plugin add https://github.com/maykonsilva2/omarchy-pomodoro`.
 
 ## License
 
